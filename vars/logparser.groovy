@@ -14,6 +14,8 @@ def setVerbose(v) {
     verbose = v
 }
 
+// TODO: param runWrapper
+
 //***************
 //* LOG PARSING *
 //***************
@@ -70,6 +72,7 @@ List<java.util.LinkedHashMap> getLogIndex() {
 // - branch name of all parents (parent, grandParent, etc ...)
 // { id: { name: brancheName, children: [id ...], nested: [id, ...], parent: id, parentNames: [ parentName, grandParentName, ...] } }
 // cf https://stackoverflow.com/a/57351397
+// TODO : try using directly currentBuild.rawBuild.allActions.findAll { it.class == org.jenkinsci.plugins.workflow.job.views.FlowGraphAction } which should contain the same information (and avoid parsing xml files on disk)
 @NonCPS
 java.util.LinkedHashMap getWorkflowBranchMap() {
 
@@ -105,18 +108,24 @@ java.util.LinkedHashMap getWorkflowBranchMap() {
         if (nodeClass == 'cps.n.StepStartNode') {
             def descriptorId = rootnode.node.descriptorId
             def name = null
+            def stage = false
             if (descriptorId == 'org.jenkinsci.plugins.workflow.cps.steps.ParallelStep') {
                 name = rootnode.actions.'org.jenkinsci.plugins.workflow.cps.steps.ParallelStepExecution_-ParallelLabelAction'.branchName.toString()
-                // if node is missing default value is ''
-                if (name == '') {
-                    name = null
+            } else if (descriptorId == 'org.jenkinsci.plugins.workflow.support.steps.StageStep') {
+                name = rootnode.actions.'wf.a.LabelAction'.displayName
+                if (name != '') {
+                    stage = true
                 }
+            }
+            if (name == '') {
+                name = null
             }
 
             branchMap."$id" = [:]
             branchMap."$id".children = []
             branchMap."$id".nested = []
             branchMap."$id".name = name
+            branchMap."$id".stage = stage
 
             //if (verbose) {
             //    print "file ${file.path}: branchMap.$id=${branchMap."$id"}"
@@ -243,6 +252,63 @@ List<java.util.LinkedHashMap> getLogIndexWithBranches() {
     }
 
     return logIndexWithBranches
+}
+
+//*******************************
+//* GENERATE URL TO BRANCH LOGS *
+//*******************************
+// return them as map (key = id in case 2 branches have the same name)
+// TODO: find a better representation (tree)
+
+java.util.LinkedHashMap getBlueOceanLogMap() {
+    // get branch information
+    def branchMap = getWorkflowBranchMap()
+
+    // remove nameless
+    return branchMap.findAll{ k,v -> v.name != null }.collect{ k,v ->
+        def blueOceanUrl = "${env.HUDSON_URL}blue/organizations/jenkins/${env.JOB_NAME}/detail/${env.JOB_NAME}/${env.BUILD_NUMBER}/pipeline/${k}"
+        def blueOceanRestUrl = "${env.HUDSON_URL}blue/rest/organizations/jenkins/pipelines/${env.JOB_NAME}/runs/${env.BUILD_NUMBER}/nodes/${k}/"
+        def blueOceanLog = "${blueOceanRestUrl}log/?start=0"
+
+        return [
+            (k): [
+                name: v.name,
+                parentNames: v.parentNames,
+                stage: v.stage,
+                url: blueOceanUrl,
+                restUrl: blueOceanRestUrl,
+                log: blueOceanLog
+            ]
+        ]
+    }
+}
+
+java.util.LinkedHashMap getPipelineStepsLogMap() {
+    // get branch information
+    def branchMap = getWorkflowBranchMap()
+
+    return branchMap.collect{ k,v ->
+        return [
+            (k): [
+                name: v.name,
+                parentNames: v.parentNames,
+                stage: v.stage,
+                url: "${env.HUDSON_URL}job/${env.JOB_NAME}/${env.BUILD_NUMBER}/execution/node/${k}/",
+                children: v.children.collect{
+                    def childURL = "${env.HUDSON_URL}job/${env.JOB_NAME}/${env.BUILD_NUMBER}/execution/node/${it}/"
+                    return [
+                        (it): [
+                            url: childURL,
+                            log: "${childURL}log"
+                        ]
+                    ]
+                },
+                // keep info to traverse the tree
+                nested: v.nested,
+                parent: v.parent
+            ]
+        ]
+    }
 }
 
 //***************************
@@ -485,6 +551,7 @@ String getLogsWithBranchInfo(java.util.LinkedHashMap options = [:])
 //*************
 
 // archive buffer directly on the master (no need to instantiate a node like ArchiveArtifact)
+// cf https://github.com/gdemengin/pipeline-whitelist
 @NonCPS
 void archiveArtifactBuffer(String name, String buffer) {
     def jobRoot = currentBuild.rawBuild.getRootDir()

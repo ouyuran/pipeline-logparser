@@ -2,7 +2,7 @@
 
 
 // import logparser library
-@Library('pipeline-logparser@1.1') _
+@Library('pipeline-logparser@urlapi') _
 
 // ===============
 // = constants   =
@@ -433,6 +433,10 @@ def parseLogs(expectedLogMap, begin, end) {
     }
 
     checkBranchLogs(logsBranch21NoParent, 'branch21', expectedBranchLogs(expectedLogMap, 'branch2.branch21', '[branch21] '))
+
+    print logparser.getBlueOceanLogMap()
+
+    print logparser.getPipelineStepsLogMap()
 }
 
 
@@ -463,6 +467,8 @@ def testLogparser() {
                 runBranchesWithManyLines(it * 1000, tmpLogMap)
                 timestamps {
                     print 'before parsing'
+                    print logparser.getBlueOceanLogMap()
+                    print logparser.getPipelineStepsLogMap()
                     logparser.archiveLogsWithBranchInfo("manylines${it * 1000}.txt")
                     print 'after parsing'
                 }

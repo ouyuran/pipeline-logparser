@@ -70,7 +70,7 @@ it allows:
 ### import pipeline-logparser library
 in Jenkinsfile import library like this
 ```
-@Library('pipeline-logparser@1.1') _
+@Library('pipeline-logparser@2.0') _
 ```
 _identifier "pipeline-logparser" is the name of the library set by jenkins administrator in instance configuration:_
 * _it may be different on your instance_
@@ -113,7 +113,7 @@ Note:
   ```
   example:  
   ```
-  @Library('pipeline-logparser@1.1') _
+  @Library('pipeline-logparser@2.0') _
 
   parallel(
     branch1: { echo 'in branch1' },
@@ -183,3 +183,8 @@ Note:
   - ability to filter main thread (using filter = [null])
   - new option hidePipeline to filter Pipeline technical logs (default value true to hide them)
   - fix parsing issues with old version of workflow-job plugin
+
+* 2.0 (11/2019)
+  - new API to retrieve URLs to logs of branches (blueOcean and pipeline Steps URLs)
+  - enhance exsting API to parse logs from another run/job
+  - handle logs from stages
